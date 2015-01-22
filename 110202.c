@@ -2,318 +2,312 @@
 #include <stdlib.h>
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define TRIPLE(a,b,c) ((a)*13*13 + (b)*13 + (c))
+#define QUADRUPLE(a,b,c,d) ((a)*13*13*13 + (b)*13*13 + (c)*13 + (d))
 
+/* hand rank encoding 
+ * [Straight Flush] [Four of a Kind] [Full House] [Flush] [Straight] [Three of a Kind] [Two Pairs] [Pair] [High Card] 
+ *        8|x               7|x         6|x       5|xxxxx   4|x             3|x          2|xxx     1|xxxx   0|xxxxx
+ * x: denote 1digit base(13) number
+ * 13^6 = 4826809 < 10000000. so, category number can be encoded (c)*1e7
+ */
+ 
 /* for card encoding */
 char *suits = "CDHS";
 char *values = "23456789TJQKA";
 int value_map[100] = {0,};
 
-int rank_card(char suit, char value) { //ex : 2C -> 0, 2D -> 1, 2H -> 2, 2S -> 3, 3C -> 4
-  int i,j;
+int hands[2][5];
 
-  for (i=0; i<4; i++)
-    if (suits[i] == suit) break;
-  for (j=0; j<13; j++)
-    if (values[j] == value) break;
+int rank_card(char suit, char value) 
+{
+    /*printf("suit=%c, value=%c\n", suit, value);*/
+    /*ex : 2C -> 0, 2D -> 1, 2H -> 2, 2S -> 3, 3C -> 4*/
+    int i,j;
 
-  return j*4 + i;
+    for (i=0; i<4; i++)
+        if (suits[i] == suit) break;
+    for (j=0; j<13; j++)
+        if (values[j] == value) break;
+
+    return j*4 + i;
 }
 
-char suit(int card) {
-  return suits[card%4];
+char suit(int card)
+{
+    return suits[card%4];
 }
 
-int value(int card) {
-  return value_map[values[card/4]];
+int value(int card)
+{
+    return value_map[values[card/4]];
 }
 
-#define BASE_ONE_PAIR (13*13*13*13*13)
-#define BASE_TWO_PAIR (BASE_ONE_PAIR + (13*13*13*13))
-#define BASE_THREE_CARD (BASE_TWO_PAIR + (13*13))
-#define BASE_STRAIGHT (BASE_THREE_CARD + 13)
-#define BASE_FLUSH (BASE_STRAIGHT + 13)
-#define BASE_FULL_HOUSE (BASE_FLUSH + (13*13*13*13*13))
-#define BASE_FOUR_CARD (BASE_FULL_HOUSE + 13)
-#define BASE_STRAIGHT_FLUSH (BASE_FOUR_CARD + 13)
+int samevalue(int cards[], int len)
+{
+    int i;
+    int v;
 
-int is_straight_flush(int cards[]) {
-  int i; //loop var
-  int v0,s0; //value and suit of previous card
-  int v1,s1; //value and suit of current card
+    v = value(cards[0]);
+    for (i=1; i<len; i++)
+        if (value(cards[i]) != v) {
+            /*printf("%d != %d, i=%d, len=%d, card=%d\n", v, value(cards[i]), i, len, cards[i]);*/
+            return -1;
+        }
 
-  v0 = value(cards[0]);
-  s0 = suit(cards[0]);
-
-  for (i=1; i<5; i++) {
-    v1 = value(cards[i]);
-    s1 = suit(cards[i]);
-
-    if (s0 != s1) return -1;
-    if (v0 - 1 != v1) return -1;
-    v0 = v1;
-  }
-
-  return value(cards[0]) + BASE_STRAIGHT_FLUSH; //return largest card value with offset
+    return v;
 }
 
-int is_four_card(int cards[]) {
-  int i,offset;
-  int v0, v1;
+int samesuit(int cards[], int len)
+{
+    int i;
+    char s;
 
-  //two cases. v[0]~v[3] are equal, v[1]~v[4] are equal
-  for (offset=0; offset<2; offset++) {
-    v0 = value(cards[offset]);
+    s = suit(cards[0]);
+    for (i=1; i<len; i++)
+        if (suit(cards[i]) != s) return -1;
 
-    for (i=offset+1; i<offset+4; i++) {
-      v1 = value(cards[i]);
-      if (v1 != v0) break;
-    }
-    if (i == offset+4) return v0 + BASE_FOUR_CARD;
-  }
-  return -1;
+    return s;
 }
 
-int is_full_house(int cards[]) {
-  int i;
-  int v0, v1;
+int consecutive_values(int cards[], int len)
+{
+    int v;
+    int i;
 
-  //two cases
-  //1. v[0]~v[2] are equal, v[3]==v[4]
-  //2. v[0]==v[1], v[2] ~ v[4] are equal
+    v = value(cards[0]);
+    for (i=0; i<len; i++, v--)
+        if (value(cards[i]) != v) return -1;
 
-  // Case 1
-  v0 = value(cards[0]);
-  for (i=1; i<3; i++) {
-    v1 = value(cards[i]);
-
-    if (v1 != v0) break;
-  }
-
-  if (i == 3) {
-    if (value(cards[3]) == value(cards[4])) 
-      return v0 + BASE_FULL_HOUSE;
-    else
-      return -1;
-  }
-
-  // Case 2
-  if (value(cards[0]) != value(cards[1])) 
-    return -1;
-  v0 = value(cards[2]);
-  for (i=3; i<5; i++) {
-    v1 = value(cards[i]);
-
-    if (v1 != v0) return -1;
-  }
-
-  return v0 + BASE_FULL_HOUSE;
+    return value(cards[0]);
 }
 
-int is_flush(int cards[]) {
-  int i;
-  int s0, v0, s1;
-
-  s0 = suit(cards[0]);
-
-  for (i=1; i<5; i++) {
-    s1 = suit(cards[i]);
-    if (s0 != s1) return -1;
-  }
-
-  v0 = 0;
-  for (i=0; i<5; i++) {
-    v0 = v0*13 + value(cards[i]);
-  }
-
-  return BASE_FLUSH + v0;
+int card_compare(const void *i, const void *j)
+{
+    return value(*(int *)j) - value(*(int *)i);
 }
 
-int is_straight(int cards[]) {
-  int i;
-  int v0, v1;
+int input()
+{
+    int i, j;
+    char s, v;
+    char buf[BUFSIZ];
+    char *pch;
 
-  v0 = value(cards[0]);
-  for (i=1; i<5; i++) {
-    v1 = value(cards[i]);
-    if (v0 - 1 != v1) return -1;
-    v0 = v1;
-  }
+    if (fgets(buf, BUFSIZ - 1, stdin) != NULL) {
+        pch = buf;
+        for (i=0; i<2; i++) {
+            for (j=0; j<5; j++) {
+                v = *pch++;
+                s = *pch++;
+                hands[i][j] = rank_card(s, v);
+                pch++; /* for space or newline */
+            }
+        }
 
-  return value(cards[0]) + BASE_STRAIGHT;
-}
-
-int is_three_card(int cards[]) {
-  int offset;
-  int i;
-  int v0, v1;
-
-  for (offset=0; offset<3; offset++) {
-    v0 = value(cards[offset]);
-    for (i=offset+1; i<offset+3; i++) {
-      v1 = value(cards[i]);
-      if (v0 != v1) break;
+        /*
+        printf("== input end ==\n");
+        for (i=0; i<2; i++) {
+            for (j=0; j<5; j++) {
+                printf("%d%c ", value(hands[i][j]), suit(hands[i][j]));
+            }
+            printf("\n");
+        }
+        */
+        return 1;
     }
 
-    if (i == offset+3) return v0 + BASE_THREE_CARD;
-  }
-
-  return -1;
+    return 0;
 }
 
-int is_two_pair(int cards[]) {
-  int i; //loop var
-  int v0, v1; //value of each pair
-  int s; //sum of all cards value
+int check_straight_flush(int hands[])
+{
+    int i;
+    char s;
+    int v;
 
-  //select first pair
-  //first pair only can be seen at the (0,1) or (1,2)
-  for (i=0; i<2; i++) {
-    if (value(cards[i]) == value(cards[i+1])) break;
-  }
-  if (i == 2) return -1; //first pair not found
-  v0 = value(cards[i]);
+    /* check suit all same */
+    if (samesuit(hands, 5) < 0)
+        return 0;
 
-  //select second pair
-  for (i=i+2; i<4; i++) {
-    if (value(cards[i]) == value(cards[i+1])) break;
-  }
-  if (i == 4) return -1; //second pair not found
-  v1 = value(cards[i]);
+    /* check consecutive value */
+    if ((v = consecutive_values(hands, 5)) >= 0)
+        return (int)(8*1e7) + v;
 
-  for (i=0; i<5; i++) s += value(cards[i]);
-
-  return BASE_TWO_PAIR + MAX(v0, v1)*13 + (s - (v0+v1)*2);
+    return 0;
 }
 
-int is_one_pair(int cards[]) {
-  int i,j; //loop var
-  int s; //base 13 represented value of other cards
-  for (i=0; i<4; i++) {
-    if (value(cards[i]) == value(cards[i+1])) {
-      s = 0;
-      for (j=0; j<5; j++) {
-        if (j == i || j == i+1) continue;
-        s = s*13 + value(cards[j]);
-      }
+int check_4kind(int hands[])
+{
+    int v;
 
-      return BASE_ONE_PAIR + value(cards[i])*13*13*13 + s;
-    }
-  }
-  return -1;
+    /* case 1) 0..3 : same, 4: differ */
+    if ((v = samevalue(hands, 4)) >= 0)
+        return (int)(7*1e7) + v;
+
+    /* case 2) 0: differ, 1..4: same */
+    if ((v = samevalue(hands + 1, 4)) >= 0)
+        return (int)(7*1e7) + v;
+
+    return 0;
 }
 
-int high_card(int cards[]) {
-  int s = 0;
-  int i;
+int check_fullhouse(int hands[])
+{
+    int i;
+    int v;
 
-  for (i=0; i<5; i++) {
-    /*printf("%c%c ", values[value(cards[i])], suit(cards[i]));*/
-    s = s*13 + value(cards[i]);
-  }
-  /*printf("\n");*/
+    /*printf("check fullhouse case1\n");*/
 
-  return s;
+    /* case 1) x x x p p */
+    if ((v = samevalue(hands, 3)) >= 0 && samevalue(hands + 3, 2) >= 0)
+        return (int)(6*1e7) + v;
+
+    /*printf("check fullhouse case2\n");*/
+    /* case 2) p p x x x */
+    if ((v = samevalue(hands + 2, 3)) >= 0 && samevalue(hands, 2) >= 0) 
+        return (int)(6*1e7) + v;
+
+    /*printf("no\n");*/
+    return 0;
 }
 
-/* for determining hand rank */
-int rank_hand(int cards[]) {
-  int rank; 
-  if ((rank = is_straight_flush(cards)) >= 0) {
-    /*printf("straight flush\n");*/
-    return rank;
-  }
-  if ((rank = is_four_card(cards)) >= 0) {
-    /*printf("four cards\n");*/
-    return rank;
-  }
-  if ((rank = is_full_house(cards)) >= 0) {
-    /*printf("full house\n");*/
-    return rank;
-  }
-  if ((rank = is_flush(cards)) >= 0) {
-    /*printf("flush\n");*/
-    return rank;
-  }
-  if ((rank = is_straight(cards)) >= 0) {
-    /*printf("straight\n");*/
-    return rank;
-  }
-  if ((rank = is_three_card(cards)) >= 0) {
-    /*printf("three cards\n");*/
-    return rank;
-  }
-  if ((rank = is_two_pair(cards)) >= 0) {
-    /*printf("two pairs\n");*/
-    return rank;
-  }
-  if ((rank = is_one_pair(cards)) >= 0) {
-    /*printf("one pair\n");*/
-    return rank;
-  }
-  /*printf("high card\n");*/
-  return high_card(cards);
-}
+int highcard(int hands[])
+{
+    int i;
+    int v = 0;
 
-int card_compare(const void *i, const void *j) {
-  return value(*(int *)j) - value(*(int *)i);
-}
-
-int main() {
-  char buf[BUFSIZ];
-  int i,j; //loop var
-  char s,v; //suit and value for card
-  char *pch;
-  int card;
-  int hands[2][5];
-  
-  int rank0, rank1; //0 for black, 1 for white
-
-  //initialize value map (char => int)
-  for (i=0; i<13; i++) {
-    char v = values[i];
-    value_map[(int)v] = i;
-  }
-
-  /*printf("AH = %d, KD = %d\n", rank_card('H', 'A'), rank_card('D', 'K')); return 0;*/
-
-  while(fgets(buf, BUFSIZ-1, stdin) != NULL) {
-    pch = buf;
-    for (i=0; i<2; i++) {
-      for (j=0; j<5; j++) {
-        v = *pch++;
-        s = *pch++;
-        card = rank_card(s, v);
-        hands[i][j] = card;
-        pch++; //for space char or newline
-      }
+    for (i=0; i<5; i++) {
+        v = v*13 + value(hands[i]);
     }
 
-    //sort hands for comparing
+    return v;
+}
+
+int check_flush(int hands[])
+{
+    /* all same suit */
+    if (samesuit(hands, 5) < 0)
+        return 0;
+    return (int)(5*1e7) + highcard(hands);
+}
+
+int check_straight(int hands[])
+{
+    int v;
+    if ((v = consecutive_values(hands, 5)) >= 0)
+        return (int)(4*1e7) + v;
+    return 0;
+}
+
+int check_3kind(int hands[])
+{
+    int v;
+    /* case 1) x y s s s */
+    if ((v = samevalue(hands + 2, 3)) >= 0)
+        return (int)(3*1e7) + v;
+    /* case 2) x s s s y */
+    if ((v = samevalue(hands + 1, 3)) >= 0)
+        return (int)(3*1e7) + v;
+    /* case 3) s s s x y */
+    if ((v = samevalue(hands, 3)) >= 0)
+        return (int)(3*1e7) + v;
+
+    return 0;
+}
+
+int check_2pair(int hands[])
+{
+    int v1, v2;
+    /* case 1) x x y y s */
+    if ((v1 = samevalue(hands, 2)) >= 0 && (v2 = samevalue(hands + 2, 2)) >= 0)
+        return (int)(2*1e7) + TRIPLE(MAX(v1, v2), MIN(v1, v2), value(hands[4]));
+
+    /* case 2) x x s y y */
+    if ((v1 = samevalue(hands, 2)) >= 0 && (v2 = samevalue(hands + 3, 2)) >= 0)
+        return (int)(2*1e7) + TRIPLE(MAX(v1, v2), MIN(v1, v2), value(hands[2]));
+
+    /* case 3) s x x y y */
+    if ((v1 = samevalue(hands + 1, 2)) >= 0 && (v2 = samevalue(hands + 3, 2)) >= 0)
+        return (int)(2*1e7) + TRIPLE(MAX(v1, v2), MIN(v1, v2), value(hands[0]));
+
+    return 0;
+}
+
+int check_1pair(int hands[])
+{
+    int v;
+    /* case 1) a a x y z */
+    if ((v = samevalue(hands, 2)) >= 0)
+        return (int)(1*1e7) + QUADRUPLE(v, value(hands[2]), value(hands[3]), value(hands[4]));
+    /* case 2) x a a y z */
+    if ((v = samevalue(hands + 1, 2)) >= 0)
+        return (int)(1*1e7) + QUADRUPLE(v, value(hands[0]), value(hands[3]), value(hands[4]));
+    /* case 3) x y a a z */
+    if ((v = samevalue(hands + 2, 2)) >= 0)
+        return (int)(1*1e7) + QUADRUPLE(v, value(hands[0]), value(hands[1]), value(hands[4]));
+    /* case 4) x y z a a */
+    if ((v = samevalue(hands + 3, 2)) >= 0)
+        return (int)(1*1e7) + QUADRUPLE(v, value(hands[0]), value(hands[1]), value(hands[2]));
+
+    return 0;
+}
+
+int (*rank_func[9])(int hands[]) = {check_straight_flush, check_4kind, check_fullhouse, 
+    check_flush, check_straight, check_3kind, check_2pair, check_1pair, highcard};
+
+int process()
+{
+    int i,j;
+    int r1, r2;
+
     qsort(hands[0], 5, sizeof(int), card_compare);
     qsort(hands[1], 5, sizeof(int), card_compare);
 
-    /*for (i=0; i<2; i++) {*/
-      /*for (j=0; j<5; j++) {*/
-        /*printf("%c%c ", values[value(hands[i][j])], suit(hands[i][j]));*/
-      /*}*/
-      /*printf("\n");*/
-    /*}*/
-
-    /*printf("Black: ");*/
-    int rank0 = rank_hand(hands[0]);
-    /*printf("White: ");*/
-    int rank1 = rank_hand(hands[1]);
-
-    /*printf("Black : %d, White: %d\n", rank0, rank1);*/
-
-    //print result
-    if (rank0 == rank1) {
-      printf("Tie.\n");
-    } else if (rank0 > rank1) {
-      printf("Black wins.\n");
-    } else {
-      printf("White wins.\n");
+    /*
+    for (i=0; i<2; i++) {
+        for (j=0; j<5; j++) {
+            printf("%d%c(=%d) ", value(hands[i][j]), suit(hands[i][j]), hands[i][j]);
+        }
+        printf("\n");
     }
-  }
-  return 0;
+    */
+
+    /* hand 1 */
+    for (i=0; i<9; i++)
+        if ((r1 = rank_func[i](hands[0])) > 0) break;
+    /*printf("rank_func[%d]\n", i);*/
+
+    /* hand 2 */
+    for (i=0; i<9; i++)
+        if ((r2 = rank_func[i](hands[1])) > 0) break;
+    /*printf("rank_func[%d]\n", i);*/
+
+    /*printf("r1 = %d, r2 = %d\n", r1, r2);*/
+    return r1 - r2;
 }
+
+int main()
+{
+    int i;
+    int r;
+    /*initialize value map (char => int)*/
+    for (i=0; i<13; i++) {
+        char v = values[i];
+        value_map[(int)v] = i;
+    }
+
+    while (1) {
+        if (!input())
+            break;
+        r = process();
+        if (r != 0)
+            printf("%s wins.\n", r > 0 ? "Black" : "White");
+        else
+            printf("Tie.\n");
+    }
+    return 0;
+}
+
+/* vim: set ts=4 sw=4 : */
