@@ -55,6 +55,8 @@ int input()
         case 'S':
             sscanf(buf+2, "%s", name);
             break;
+        default:
+            break;
     }
 
     return 1;
@@ -116,28 +118,32 @@ void fill()
 {
     queue<point> q;
     point w, e;
-    int x;
+    int _x;
     char target_color;
 
     q.push((point){x,y});
+    target_color = image[y][x];
+
+    if (target_color == color) return;
 
     while (!q.empty()) {
-        for (queue<point>::iterator it = q.begin(); it != q.end(); it++) {
-            w = *it;
-            e = *it;
-            target_color = image[it->y][it->x];
+        point p = q.front();
+        q.pop();
+        w = p;
+        e = p;
 
-            while(image[w.y][w.x - 1] != target_color) w.x--;
-            while(image[e.y][e.x + 1] != target_color) e.x++;
+        while(image[w.y][w.x - 1] == target_color && w.x - 1 >= 0) w.x--;
+        while(image[e.y][e.x + 1] == target_color && e.x + 1 <= cols + 1) e.x++;
 
-            for (x = w.x; x <= e.x; x++) {
-                image[it->y][x] = color;
+        for (_x = w.x; _x <= e.x; _x++) {
+            // printf("(%d,%d) = %c\n", _x, p.y, color);
+            image[p.y][_x] = color;
 
-                if (image[it->y - 1][x] == target_color)
-                    q.push((point){x, it->y - 1});
-                if (image[it->y + 1][x] == target_color)
-                    q.push((point){x, it->y + 1});
-            }
+            if (image[p.y - 1][_x] == target_color)
+                q.push((point){_x, p.y - 1});
+            if (image[p.y + 1][_x] == target_color)
+                q.push((point){_x, p.y + 1});
+        }
     }
 }
 
@@ -169,8 +175,8 @@ void output()
 {
     int r, c;
     printf("%s\n", name);
-    for (r = 0; r < rows; r++) {
-        for (c = 0; c < cols; c++) {
+    for (r = 1; r <= rows; r++) {
+        for (c = 1; c <= cols; c++) {
             fputc(image[r][c], stdout);
         }
         fputc('\n', stdout);
