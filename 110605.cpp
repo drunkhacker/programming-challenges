@@ -3,8 +3,17 @@
 #include <map>
 #include <stdlib.h>
 
-/* bignum */
-#define	MAXDIGITS	1000	/* maximum length bignum */ 
+/* pseudo code
+ * n(k, d) = 깊이 d인 complete k-ary 트리의 노드 갯수
+ *
+ * a(k, 0) = 1
+ * a(k, 1) = k!
+ * a(k, d) = (n(k, d)-1)!/((n(k, d-1)!)^k) * a(k, d-1)^k
+ *           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *           P(k, d) = n(k, d)-1개의 원소를 k등분해서 나누는 방법의 수
+ */
+
+#define MAXDIGITS 11000
 
 #define PLUS		1		/* positive sign bit */
 #define MINUS		-1		/* negative sign bit */
@@ -15,20 +24,197 @@ typedef struct {
     int lastdigit;			/* index of high-order digit */
 } bignum;
 
-
+void print_bignum(bignum *n);
 void int_to_bignum(int s, bignum *n);
+void initialize_bignum(bignum *n);
+int max(int a, int b);
 void add_bignum(bignum *a, bignum *b, bignum *c);
 void subtract_bignum(bignum *a, bignum *b, bignum *c);
 int compare_bignum(bignum *a, bignum *b);
 void zero_justify(bignum *n);
-void print_bignum(bignum *n);
 void digit_shift(bignum *n, int d);
 void multiply_bignum(bignum *a, bignum *b, bignum *c);
 void divide_bignum(bignum *a, bignum *b, bignum *c);
 
+using namespace std;
+typedef map< pair<int, int>, bignum > bmap;
+bmap ncr;
+bmap ans; //ans[k,d] = complete k-ary 트리에서 depth d일때 labeling 방법
+long nodes[22][22] = {0,}; //nodes[k][d] = depth d complate k-ary 트리의 총 노드 개수
+bignum f[3281];
+
+bignum* nCr(int n, int r)
+{
+    bignum *a, *b, c;
+    bmap::iterator it;
+    pair<int, int> key = make_pair(n, r);
+
+    //printf("n=%d, r=%d\n", n, r);
+
+    if (r == 0 || n == r) {
+        it = ncr.find(key);
+        if (it == ncr.end()) {
+            int_to_bignum(1, &c);
+            ncr[key] = c;
+        }
+        return &ncr[key];
+    }
+
+    if (r == 1) {
+        int_to_bignum(n, &c);
+        ncr[key] = c;
+        return &ncr[key];
+    }
+
+    it = ncr.find(key);
+    if (it == ncr.end()) {
+        bignum *r_, *n_, *n_r, t;
+        //nCr = n! / (n-r)! / r!
+        n_ = &f[n];
+        n_r = &f[n-r];
+        r_ = &f[r];
+
+        divide_bignum(n_, n_r, &t);
+        divide_bignum(&t, r_, &c);
+        ncr[key] = c;
+    }
+    return &ncr[key];
+}
+
+void partition(int k, int d, bignum *res)
+{
+    //calculate P(k, d)
+    int n, i;
+    bignum t, a;
+    //printf("partition k=%d, d=%d\n", k, d);
+
+    n = nodes[k][d] - 1;
+    int_to_bignum(1, res);
+
+    a = f[n];
+
+    for (i=0; i<k; i++) {
+        divide_bignum(&a, &f[nodes[k][d-1]], &t);
+        a = t;
+    }
+    *res = a;
+}
+
+void bigpow(bignum *a, int k, bignum *res)
+{
+    bignum s, t;
+
+    int_to_bignum(1, &s);
+    int_to_bignum(1, &t);
+    while (k--) {
+        //printf("a=");
+        //print_bignum(a);
+        //printf("s=");
+        //print_bignum(&s);
+        multiply_bignum(a, &s, &t);
+        //printf("t=");
+        //print_bignum(&t);
+        s = t;
+    }
+
+    memcpy(res, &t, sizeof(bignum));
+    //printf("bigpow end\n");
+}
+
+bignum* compute(int k, int d)
+{
+    pair<int, int> key = make_pair(k, d);
+    bmap::iterator it;
+    bignum *prev_ans;
+    bignum t;
+
+    it = ans.find(key);
+
+    //printf("k=%d, d=%d\n", k, d);
+    if (it == ans.end()) {
+        if (d == 0) {
+            int_to_bignum(1, &t);
+        } else if (d == 1) {
+            t = f[k];
+        } else {
+            bignum t2, t3;
+
+            bigpow(compute(k, d-1), k, &t2);
+            partition(k, d, &t3);
+            //printf("t2 = "); print_bignum(&t2);
+            //printf("t3 = "); print_bignum(&t3);
+            multiply_bignum(&t2, &t3, &t);
+            //printf("t2*t3=");print_bignum(&t);
+        }
+
+        ans[key] = t;
+    }
+
+    return &ans[key];
+}
+
+
+
+//    k    d   N
+//    2   10   2**11 - 1 = 2047
+//    3    7   1 + 3 + 3^2 + ... + 3^7 = 3280
+//    4    5   1365
+//    5    4   781
+//    6    3   259
+//    7    3   400
+//    8    2   73
+//    9    2   91
+//    10   2   111
+//    11   1   12
+//    12   1   13
+//    13   1   14
+//    ....
+//    21   1   21
+
+long mpow(int x, int y)
+{
+    long r = 1;
+    while (y--)
+        r *= x;
+
+    return r;
+}
+
+int main()
+{
+    int i, k, d;
+    bignum t, t2, t3;
+
+    for (k=1; k<22; k++) {
+        nodes[k][0] = 1;
+        for (d=1; d<=21/k; d++) {
+            nodes[k][d] = nodes[k][d-1] + mpow(k, d);
+        }
+    }
+
+    int_to_bignum(1, &f[0]);
+    for (i=1; i<=3280; i++) {
+        int_to_bignum(i, &t);
+        multiply_bignum(&f[i-1], &t, &f[i]);
+    }
+
+    for (k=1; k<22; k++) {
+        for (d=0; d<=21/k; d++) {
+            compute(k, d);
+        }
+    }
+
+    while(scanf("%d %d", &k, &d) != EOF) {
+        //printf("k=%d, d=%d\n", k, d);
+        print_bignum(compute(k, d));
+    }
+
+    return 0;
+}
+
 void print_bignum(bignum *n)
 {
-	int i;
+    int i;
 
     if (n->signbit == MINUS) printf("- ");
     for (i=n->lastdigit; i>=0; i--)
@@ -248,133 +434,4 @@ void divide_bignum(bignum *a, bignum *b, bignum *c)
 
     a->signbit = asign;
     b->signbit = bsign;
-}
-
-/* bignum end */
-
-using namespace std; 
-
-map< pair<int, int>, bignum > ncr;
-int k, d;
-
-bignum a[22] = {0,}; //a[d] = complete k-ary 트리에서 depth d일때 labeling 방법
-bignum f[22] = {0,}; //f[n] = n!
-int n[21] = {0,}; //n[d] = depth d complate k-ary 트리의 총 노드 개수
-
-bignum *nCr(int n, int r)
-{
-    bignum *a, *b, c;
-    map< pair<int, int>, bignum >::iterator it;
-
-    if (r == 0 || n == r) {
-        it = ncr.find(make_pair(n, r));
-        if (it == ncr.end()) {
-            int_to_bignum(1, &c);
-            ncr[make_pair(n, r)] = c;
-        }
-        return &ncr[make_pair(n, r)];
-    }
-
-    it = ncr.find(make_pair(n, r));
-    if (it == ncr.end()) {
-        a = nCr(n-1, r-1);
-        b = nCr(n-1, r);
-        add_bignum(a, b, &c);
-        ncr[make_pair(n, r)] = c;
-    }
-    return &ncr[make_pair(n, r)];
-}
-
-
-
-//    k    d   N
-//    2   10   2**11 - 1 = 2047
-//    3    7   1 + 3 + 3^2 + ... + 3^7 = 3280
-//    4    5   1365
-//    5    4   781
-//    6    3   259
-//    7    3   400
-//    8    2   73
-//    9    2   91
-//    10   2   111
-//    11   1   12
-//    12   1   13
-//    13   1   14
-//    ....
-//    21   1   21
-
-int mpow(int x, int y)
-{
-    long r = 1;
-    while (y--)
-        r *= x;
-
-    return r;
-}
-
-bignum *process()
-{
-    int i,j;
-    int nodes;
-    int part;
-    bignum t;
-
-    n[0] = 1;
-    for (i=1; i<=d; i++) {
-        n[i] = n[i-1] + mpow(k, i);
-    }
-
-    for (i=0; i<22; i++)
-        initialize_bignum(&a[i]);
-
-    int_to_bignum(1, &a[0]);
-    memcpy(&a[1], &f[k], sizeof(bignum));
-
-    for (i=2; i<=d; i++) {
-        nodes = n[i] - 1;
-        part = (nodes)/k;
-
-        //printf("nodes = %d, part = %d\n", nodes, part);
-        //print_bignum(nCr(nodes, part));
-
-        int_to_bignum(1, &a[i]);
-        while (nodes > 0) {
-            multiply_bignum(&a[i], nCr(nodes, part), &t);
-            //printf("nodes = %d, part = %d\n", nodes, part);
-            nodes -= part;
-            memcpy(&a[i], &t, sizeof(bignum));
-        }
-        //printf("hihi\n");
-        multiply_bignum(&t, &f[k], &a[i]);
-        multiply_bignum(&a[i], &a[i-1], &t);
-        memcpy(&a[i], &t, sizeof(bignum));
-    }
-
-    return &a[d];
-}
-
-int main()
-{
-    int i;
-    bignum t, t2, t3;
-
-    int_to_bignum(12, &t);
-    int_to_bignum(12, &t2);
-    multiply_bignum(&t, &t2, &t3);
-    print_bignum(nCr(7,3));
-    print_bignum(nCr(4,3));
-
-    int_to_bignum(1, &f[0]);
-    //print_bignum(&f[0]);
-    for (i=1; i<22; i++) {
-        int_to_bignum(i, &t);
-        multiply_bignum(&f[i-1], &t, &f[i]);
-        //print_bignum(&f[i]);
-    }
-
-    while(scanf("%d %d", &k, &d) != EOF) {
-        print_bignum(process());
-    }
-
-    return 0;
 }
