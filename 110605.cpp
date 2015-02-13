@@ -1,10 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include <map>
 #include <stdlib.h>
-#include <sys/time.h>
-#include <time.h>
-
 
 /* pseudo code
  * n(k, d) = 깊이 d인 complete k-ary 트리의 노드 갯수
@@ -12,8 +8,25 @@
  * a(k, 0) = 1
  * a(k, 1) = k!
  * a(k, d) = (n(k, d)-1)!/((n(k, d-1)!)^k) * a(k, d-1)^k
- *           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
- *           P(k, d) = n(k, d)-1개의 원소를 k등분해서 나누는 방법의 수
+ *
+ *                        /   a(k, d-1) \ K
+ *         = (n(k, d)-1)! | ------------ |
+ *                        \  n(k, d-1)! /
+ *
+ * ==>    a(k, d)       /  a(k, d-1) \ K
+ *     ------------  = | ------------ |
+ *      (n(k,d)-1)!     \ n(k, d-1)! /
+ *
+ * ==>    a(k, d)       /  a(k, d-1) \ K      1
+ *      -----------  = | ------------ |  x -------
+ *        n(k,d)!       \ n(k, d-1)! /      n(k,d)
+ *
+ * Let, 
+ *            n(k,d)!
+ * c(k,d) =  --------- , then
+ *            a(k,d)
+ *
+ * c(k,d) = n(d)*(c(k,d-1)^k)
  */
 
 #define MAXDIGITS 11000
@@ -44,6 +57,7 @@ typedef struct bignum {
     bignum operator * (bignum& b);
     bignum operator - (bignum& b);
     bignum operator / (bignum& b);
+    bignum operator ^ (int k);
 
     void put();
 
@@ -52,119 +66,9 @@ typedef struct bignum {
 } bignum;
 
 
-using namespace std;
-typedef map< pair<int, int>, bignum > bmap;
-bmap ncr;
-bmap ans; //ans[k,d] = complete k-ary 트리에서 depth d일때 labeling 방법
-long nodes[22][22] = {0,}; //nodes[k][d] = depth d complate k-ary 트리의 총 노드 개수
+long n[22][22] = {0,}; //n[k][d] = depth d complate k-ary 트리의 총 노드 개수
 bignum f[3281];
-
-bignum* nCr(int n, int r)
-{
-    bignum *a, *b, c;
-    bmap::iterator it;
-    pair<int, int> key = make_pair(n, r);
-
-    //printf("n=%d, r=%d\n", n, r);
-
-    if (r == 0 || n == r) {
-        it = ncr.find(key);
-        if (it == ncr.end()) {
-            c = 1;
-            ncr[key] = c;
-        }
-        return &ncr[key];
-    }
-
-    if (r == 1) {
-        c = n;
-        ncr[key] = c;
-        return &ncr[key];
-    }
-
-    it = ncr.find(key);
-    if (it == ncr.end()) {
-        bignum *r_, *n_, *n_r, t;
-        //nCr = n! / (n-r)! / r!
-
-        t = f[n] / f[n-r];
-        c = t / f[r];
-        ncr[key] = c;
-    }
-    return &ncr[key];
-}
-
-void partition(int k, int d, bignum *res)
-{
-    //calculate P(k, d)
-    int n, i;
-    bignum t, a;
-    //printf("partition k=%d, d=%d\n", k, d);
-
-    n = nodes[k][d] - 1;
-    *res = 1;
-
-    a = f[n];
-
-    for (i=0; i<k; i++) {
-        t = a/f[nodes[k][d-1]];
-        a = t;
-    }
-    *res = a;
-}
-
-void bigpow(bignum *a, int k, bignum *res)
-{
-    bignum s, t;
-
-    s = 1;
-    t = 1;
-    while (k--) {
-        //printf("a=");
-        //print_bignum(a);
-        //printf("s=");
-        //print_bignum(&s);
-        t = *a * s;
-        //printf("t=");
-        //print_bignum(&t);
-        s = t;
-    }
-
-    *res = t;
-}
-
-bignum* compute(int k, int d)
-{
-    pair<int, int> key = make_pair(k, d);
-    bmap::iterator it;
-    bignum *prev_ans;
-    bignum t;
-
-    it = ans.find(key);
-
-    //printf("k=%d, d=%d\n", k, d);
-    if (it == ans.end()) {
-        if (d == 0) {
-            t = 1;
-        } else if (d == 1) {
-            t = f[k];
-        } else {
-            bignum t2, t3;
-
-            bigpow(compute(k, d-1), k, &t2);
-            partition(k, d, &t3);
-            //printf("t2 = "); print_bignum(&t2);
-            //printf("t3 = "); print_bignum(&t3);
-            t = t2*t3;
-            //printf("t2*t3=");print_bignum(&t);
-        }
-
-        ans[key] = t;
-    }
-
-    return &ans[key];
-}
-
+bignum c[22][22];
 
 
 //    k    d   N
@@ -195,46 +99,31 @@ long mpow(int x, int y)
 int main()
 {
     int i, k, d;
-    bignum t, t2, t3;
-    struct timeval tv1, tv2;
+    bignum t;
 
     for (k=1; k<22; k++) {
-        nodes[k][0] = 1;
+        n[k][0] = 1;
         for (d=1; d<=21/k; d++) {
-            nodes[k][d] = nodes[k][d-1] + mpow(k, d);
+            n[k][d] = n[k][d-1] + mpow(k, d);
         }
     }
-
-    printf("factorial start\n");
-    struct timespec tstart={0,0}, tend={0,0};
-    clock_gettime(CLOCK_MONOTONIC, &tstart);
 
     f[0] = 1;
     for (i=1; i<=3280; i++) {
         t = i;
         f[i] = f[i-1] *t;
     }
-    clock_gettime(CLOCK_MONOTONIC, &tend);
-    printf("factorial end : %.2f\n", 
-           ((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) - 
-           ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
 
-
-    printf("compute start\n");
-    clock_gettime(CLOCK_MONOTONIC, &tstart);
     for (k=1; k<22; k++) {
-        for (d=0; d<=21/k; d++) {
-            compute(k, d);
+        c[k][0] = 1;
+        for (d=1; d<=21/k; d++) {
+            t = n[k][d];
+            c[k][d] = (c[k][d-1]^k)*t;
         }
     }
-    clock_gettime(CLOCK_MONOTONIC, &tend);
-    printf("compute end : %.2f\n",
-           ((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) - 
-           ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
 
     while(scanf("%d %d", &k, &d) != EOF) {
-        //printf("k=%d, d=%d\n", k, d);
-        compute(k, d)->put();
+        (f[n[k][d]]/c[k][d]).put();
     }
 
     return 0;
@@ -463,4 +352,18 @@ bignum bignum::operator / (bignum &b)
     b.signbit = bsign;
 
     return c;
+}
+
+bignum bignum::operator ^ (int k)
+{
+    bignum s, t;
+
+    s = 1;
+    t = 1;
+    while (k--) {
+        t = *this * s;
+        s = t;
+    }
+
+    return t;
 }
