@@ -2,6 +2,9 @@
 #include <string.h>
 #include <map>
 #include <stdlib.h>
+#include <sys/time.h>
+#include <time.h>
+
 
 /* pseudo code
  * n(k, d) = 깊이 d인 complete k-ary 트리의 노드 갯수
@@ -18,23 +21,36 @@
 #define PLUS		1		/* positive sign bit */
 #define MINUS		-1		/* negative sign bit */
 
-typedef struct {
+typedef struct bignum {
     char digits[MAXDIGITS];         /* represent the number */
     int signbit;			/* 1 if positive, -1 if negative */ 
     int lastdigit;			/* index of high-order digit */
+
+    bignum () {memset(digits, 0, sizeof(digits));}
+    bignum (int number) { *this = number; }
+    bignum (const char *number) { *this = number; }
+
+    bignum operator = (char *num);
+    bignum operator = (int num);
+
+    bool operator <  (const bignum& b) const;
+    bool operator >  (const bignum& b) const { return b < *this; }
+    bool operator <= (const bignum& b) const { return !(b < *this); }
+    bool operator >= (const bignum& b) const { return !(*this < b); }
+    bool operator != (const bignum& b) const { return b < *this || *this < b; }
+    bool operator == (const bignum& b) const { return !(b != *this); }
+
+    bignum operator + (bignum& b);
+    bignum operator * (bignum& b);
+    bignum operator - (bignum& b);
+    bignum operator / (bignum& b);
+
+    void put();
+
+    void zero_justify();
+    void digit_shift(int d);
 } bignum;
 
-void print_bignum(bignum *n);
-void int_to_bignum(int s, bignum *n);
-void initialize_bignum(bignum *n);
-int max(int a, int b);
-void add_bignum(bignum *a, bignum *b, bignum *c);
-void subtract_bignum(bignum *a, bignum *b, bignum *c);
-int compare_bignum(bignum *a, bignum *b);
-void zero_justify(bignum *n);
-void digit_shift(bignum *n, int d);
-void multiply_bignum(bignum *a, bignum *b, bignum *c);
-void divide_bignum(bignum *a, bignum *b, bignum *c);
 
 using namespace std;
 typedef map< pair<int, int>, bignum > bmap;
@@ -54,14 +70,14 @@ bignum* nCr(int n, int r)
     if (r == 0 || n == r) {
         it = ncr.find(key);
         if (it == ncr.end()) {
-            int_to_bignum(1, &c);
+            c = 1;
             ncr[key] = c;
         }
         return &ncr[key];
     }
 
     if (r == 1) {
-        int_to_bignum(n, &c);
+        c = n;
         ncr[key] = c;
         return &ncr[key];
     }
@@ -70,12 +86,9 @@ bignum* nCr(int n, int r)
     if (it == ncr.end()) {
         bignum *r_, *n_, *n_r, t;
         //nCr = n! / (n-r)! / r!
-        n_ = &f[n];
-        n_r = &f[n-r];
-        r_ = &f[r];
 
-        divide_bignum(n_, n_r, &t);
-        divide_bignum(&t, r_, &c);
+        t = f[n] / f[n-r];
+        c = t / f[r];
         ncr[key] = c;
     }
     return &ncr[key];
@@ -89,12 +102,12 @@ void partition(int k, int d, bignum *res)
     //printf("partition k=%d, d=%d\n", k, d);
 
     n = nodes[k][d] - 1;
-    int_to_bignum(1, res);
+    *res = 1;
 
     a = f[n];
 
     for (i=0; i<k; i++) {
-        divide_bignum(&a, &f[nodes[k][d-1]], &t);
+        t = a/f[nodes[k][d-1]];
         a = t;
     }
     *res = a;
@@ -104,21 +117,20 @@ void bigpow(bignum *a, int k, bignum *res)
 {
     bignum s, t;
 
-    int_to_bignum(1, &s);
-    int_to_bignum(1, &t);
+    s = 1;
+    t = 1;
     while (k--) {
         //printf("a=");
         //print_bignum(a);
         //printf("s=");
         //print_bignum(&s);
-        multiply_bignum(a, &s, &t);
+        t = *a * s;
         //printf("t=");
         //print_bignum(&t);
         s = t;
     }
 
-    memcpy(res, &t, sizeof(bignum));
-    //printf("bigpow end\n");
+    *res = t;
 }
 
 bignum* compute(int k, int d)
@@ -133,7 +145,7 @@ bignum* compute(int k, int d)
     //printf("k=%d, d=%d\n", k, d);
     if (it == ans.end()) {
         if (d == 0) {
-            int_to_bignum(1, &t);
+            t = 1;
         } else if (d == 1) {
             t = f[k];
         } else {
@@ -143,7 +155,7 @@ bignum* compute(int k, int d)
             partition(k, d, &t3);
             //printf("t2 = "); print_bignum(&t2);
             //printf("t3 = "); print_bignum(&t3);
-            multiply_bignum(&t2, &t3, &t);
+            t = t2*t3;
             //printf("t2*t3=");print_bignum(&t);
         }
 
@@ -184,6 +196,7 @@ int main()
 {
     int i, k, d;
     bignum t, t2, t3;
+    struct timeval tv1, tv2;
 
     for (k=1; k<22; k++) {
         nodes[k][0] = 1;
@@ -192,246 +205,262 @@ int main()
         }
     }
 
-    int_to_bignum(1, &f[0]);
-    for (i=1; i<=3280; i++) {
-        int_to_bignum(i, &t);
-        multiply_bignum(&f[i-1], &t, &f[i]);
-    }
+    printf("factorial start\n");
+    struct timespec tstart={0,0}, tend={0,0};
+    clock_gettime(CLOCK_MONOTONIC, &tstart);
 
+    f[0] = 1;
+    for (i=1; i<=3280; i++) {
+        t = i;
+        f[i] = f[i-1] *t;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &tend);
+    printf("factorial end : %.2f\n", 
+           ((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) - 
+           ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
+
+
+    printf("compute start\n");
+    clock_gettime(CLOCK_MONOTONIC, &tstart);
     for (k=1; k<22; k++) {
         for (d=0; d<=21/k; d++) {
             compute(k, d);
         }
     }
+    clock_gettime(CLOCK_MONOTONIC, &tend);
+    printf("compute end : %.2f\n",
+           ((double)tend.tv_sec + 1.0e-9*tend.tv_nsec) - 
+           ((double)tstart.tv_sec + 1.0e-9*tstart.tv_nsec));
 
     while(scanf("%d %d", &k, &d) != EOF) {
         //printf("k=%d, d=%d\n", k, d);
-        print_bignum(compute(k, d));
+        compute(k, d)->put();
     }
 
     return 0;
 }
 
-void print_bignum(bignum *n)
+void bignum::put()
 {
     int i;
 
-    if (n->signbit == MINUS) printf("- ");
-    for (i=n->lastdigit; i>=0; i--)
-        printf("%c",'0'+ n->digits[i]);
+    if (signbit == MINUS) printf("- ");
+    for (i=lastdigit; i>=0; i--)
+        printf("%c",'0'+ digits[i]);
 
     printf("\n");
 }
 
-void int_to_bignum(int s, bignum *n)
+bignum bignum::operator = (int s)
 {
     int i;				/* counter */
     int t;				/* int to work with */
 
-    if (s >= 0) n->signbit = PLUS;
-    else n->signbit = MINUS;
+    if (s >= 0) signbit = PLUS;
+    else signbit = MINUS;
 
-    for (i=0; i<MAXDIGITS; i++) n->digits[i] = (char) 0;
+    for (i=0; i<MAXDIGITS; i++) digits[i] = (char) 0;
 
-    n->lastdigit = -1;
+    lastdigit = -1;
 
     t = abs(s);
 
     while (t > 0) {
-        n->lastdigit ++;
-        n->digits[ n->lastdigit ] = (t % 10);
+        lastdigit ++;
+        digits[ this->lastdigit ] = (t % 10);
         t = t / 10;
     }
 
-    if (s == 0) n->lastdigit = 0;
-}
+    if (s == 0) lastdigit = 0;
 
-void initialize_bignum(bignum *n)
-{
-    int_to_bignum(0,n);
+    return *this;
 }
-
 
 int max(int a, int b)
 {
     if (a > b) return(a); else return(b);
 }
 
-void add_bignum(bignum *a, bignum *b, bignum *c)
+bignum bignum::operator + (bignum &b)
 {
     int carry;			/* carry digit */
     int i;				/* counter */
 
-    initialize_bignum(c);
+    bignum c = 0;
 
-    if (a->signbit == b->signbit) c->signbit = a->signbit;
+    if (this->signbit == b.signbit) c.signbit = this->signbit;
     else {
-        if (a->signbit == MINUS) {
-            a->signbit = PLUS;
-            subtract_bignum(b,a,c);
-            a->signbit = MINUS;
+        if (this->signbit == MINUS) {
+            this->signbit = PLUS;
+            c = b-*this;
+            this->signbit = MINUS;
         } else {
-            b->signbit = PLUS;
-            subtract_bignum(a,b,c);
-            b->signbit = MINUS;
+            b.signbit = PLUS;
+            c = *this-b;
+            b.signbit = MINUS;
         }
-        return;
+        return c;
     }
 
-    c->lastdigit = max(a->lastdigit,b->lastdigit)+1;
+    c.lastdigit = max(this->lastdigit,b.lastdigit)+1;
     carry = 0;
 
-    for (i=0; i<=(c->lastdigit); i++) {
-        c->digits[i] = (char) (carry+a->digits[i]+b->digits[i]) % 10;
-        carry = (carry + a->digits[i] + b->digits[i]) / 10;
+    for (i=0; i<=(c.lastdigit); i++) {
+        c.digits[i] = (char) (carry+this->digits[i]+b.digits[i]) % 10;
+        carry = (carry + this->digits[i] + b.digits[i]) / 10;
     }
 
-    zero_justify(c);
+    c.zero_justify();
+
+    return c;
 }
 
 
-void subtract_bignum(bignum *a, bignum *b, bignum *c)
+bignum bignum::operator - (bignum &b)
 {
     int borrow;			/* has anything been borrowed? */
     int v;				/* placeholder digit */
     int i;				/* counter */
 
-    initialize_bignum(c);
+    bignum c = 0;
 
-    if ((a->signbit == MINUS) || (b->signbit == MINUS)) {
-        b->signbit = -1 * b->signbit;
-        add_bignum(a,b,c);
-        b->signbit = -1 * b->signbit;
-        return;
+    if ((this->signbit == MINUS) || (b.signbit == MINUS)) {
+        b.signbit = -1 * b.signbit;
+        c = *this + b;
+        b.signbit = -1 * b.signbit;
+        return c;
     }
 
-    if (compare_bignum(a,b) == PLUS) {
-        subtract_bignum(b,a,c);
-        c->signbit = MINUS;
-        return;
+    if (*this > b) {
+        c = b - *this;
+        c.signbit = MINUS;
+        return c;
     }
 
-    c->lastdigit = max(a->lastdigit,b->lastdigit);
+    c.lastdigit = max(this->lastdigit,b.lastdigit);
     borrow = 0;
 
-    for (i=0; i<=(c->lastdigit); i++) {
-        v = (a->digits[i] - borrow - b->digits[i]);
-        if (a->digits[i] > 0)
+    for (i=0; i<=(c.lastdigit); i++) {
+        v = (this->digits[i] - borrow - b.digits[i]);
+        if (this->digits[i] > 0)
             borrow = 0;
         if (v < 0) {
             v = v + 10;
             borrow = 1;
         }
 
-        c->digits[i] = (char) v % 10;
+        c.digits[i] = (char) v % 10;
     }
 
-    zero_justify(c);
+    c.zero_justify();
+
+    return c;
 }
 
-int compare_bignum(bignum *a, bignum *b)
+bool bignum::operator < (const bignum &b) const
 {
     int i;				/* counter */
 
-    if ((a->signbit == MINUS) && (b->signbit == PLUS)) return(PLUS);
-    if ((a->signbit == PLUS) && (b->signbit == MINUS)) return(MINUS);
+    if ((this->signbit == MINUS) && (b.signbit == PLUS)) return false;
+    if ((this->signbit == PLUS) && (b.signbit == MINUS)) return true;
 
-    if (b->lastdigit > a->lastdigit) return (PLUS * a->signbit);
-    if (a->lastdigit > b->lastdigit) return (MINUS * a->signbit);
+    if (b.lastdigit > this->lastdigit) return (PLUS * this->signbit) < 0;
+    if (this->lastdigit > b.lastdigit) return (MINUS * this->signbit) < 0;
 
-    for (i = a->lastdigit; i>=0; i--) {
-        if (a->digits[i] > b->digits[i]) return(MINUS * a->signbit);
-        if (b->digits[i] > a->digits[i]) return(PLUS * a->signbit);
+    for (i = this->lastdigit; i>=0; i--) {
+        if (this->digits[i] > b.digits[i]) return(MINUS * this->signbit) < 0;
+        if (b.digits[i] > this->digits[i]) return(PLUS * this->signbit) < 0;
     }
 
-    return(0);
+    return false;
 }
 
-void zero_justify(bignum *n)
+void bignum::zero_justify()
 {
-    while ((n->lastdigit > 0) && (n->digits[ n->lastdigit ] == 0))
-        n->lastdigit --;
+    while ((this->lastdigit > 0) && (this->digits[ this->lastdigit ] == 0))
+        this->lastdigit --;
 
-    if ((n->lastdigit == 0) && (n->digits[0] == 0))
-        n->signbit = PLUS;	/* hack to avoid -0 */
+    if ((this->lastdigit == 0) && (this->digits[0] == 0))
+        this->signbit = PLUS;	/* hack to avoid -0 */
 }
 
 
-void digit_shift(bignum *n, int d)		/* multiply n by 10^d */
+void bignum::digit_shift(int d)		/* multiply n by 10^d */
 {
     int i;				/* counter */
 
-    if ((n->lastdigit == 0) && (n->digits[0] == 0)) return;
+    if ((this->lastdigit == 0) && (this->digits[0] == 0)) return;
 
-    for (i=n->lastdigit; i>=0; i--)
-        n->digits[i+d] = n->digits[i];
+    for (i=this->lastdigit; i>=0; i--)
+        this->digits[i+d] = this->digits[i];
 
-    for (i=0; i<d; i++) n->digits[i] = 0;
+    for (i=0; i<d; i++) this->digits[i] = 0;
 
-    n->lastdigit = n->lastdigit + d;
+    this->lastdigit = this->lastdigit + d;
 }
 
 
 
-void multiply_bignum(bignum *a, bignum *b, bignum *c)
+bignum bignum::operator * (bignum &b)
 {
     bignum row;			/* represent shifted row */
     bignum tmp;			/* placeholder bignum */
     int i,j;			/* counters */
 
-    initialize_bignum(c);
+    bignum c = 0;
 
-    row = *a;
+    row = *this;
 
-    for (i=0; i<=b->lastdigit; i++) {
-        for (j=1; j<=b->digits[i]; j++) {
-            add_bignum(c,&row,&tmp);
-            *c = tmp;
+    for (i=0; i<=b.lastdigit; i++) {
+        for (j=1; j<=b.digits[i]; j++) {
+            tmp = c + row;
+            c = tmp;
         }
-        digit_shift(&row,1);
+        row.digit_shift(1);
     }
 
-    c->signbit = a->signbit * b->signbit;
+    c.signbit = this->signbit * b.signbit;
 
-    zero_justify(c);
+    c.zero_justify();
+
+    return c;
 }
 
 
-void divide_bignum(bignum *a, bignum *b, bignum *c)
+bignum bignum::operator / (bignum &b)
 {
-    bignum row;                     /* represent shifted row */
-    bignum tmp;                     /* placeholder bignum */
+    bignum row = 0;                     /* represent shifted row */
+    bignum tmp = 0;                     /* placeholder bignum */
     int asign, bsign;		/* temporary signs */
     int i,j;                        /* counters */
 
-    initialize_bignum(c);
+    bignum c = 0;
 
-    c->signbit = a->signbit * b->signbit;
+    c.signbit = this->signbit * b.signbit;
 
-    asign = a->signbit;
-    bsign = b->signbit;
+    asign = this->signbit;
+    bsign = b.signbit;
 
-    a->signbit = PLUS;
-    b->signbit = PLUS;
+    this->signbit = PLUS;
+    b.signbit = PLUS;
 
-    initialize_bignum(&row);
-    initialize_bignum(&tmp);
+    c.lastdigit = this->lastdigit;
 
-    c->lastdigit = a->lastdigit;
-
-    for (i=a->lastdigit; i>=0; i--) {
-        digit_shift(&row,1);
-        row.digits[0] = a->digits[i];
-        c->digits[i] = 0;
-        while (compare_bignum(&row,b) != PLUS) {
-            c->digits[i] ++;
-            subtract_bignum(&row,b,&tmp);
+    for (i=this->lastdigit; i>=0; i--) {
+        row.digit_shift(1);
+        row.digits[0] = this->digits[i];
+        c.digits[i] = 0;
+        while (row <= b) {
+            c.digits[i] ++;
+            tmp = row - b;
             row = tmp;
         }
     }
 
-    zero_justify(c);
+    c.zero_justify();
 
-    a->signbit = asign;
-    b->signbit = bsign;
+    this->signbit = asign;
+    b.signbit = bsign;
+
+    return c;
 }
