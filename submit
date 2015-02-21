@@ -1,0 +1,56 @@
+#!/usr/bin/env ruby
+
+require 'term/ansicolor'
+require 'nokogiri'
+require 'net/http'
+require 'net/http/post/multipart'
+
+uri = URI.parse("http://www.programming-challenges.com/pg.php?page=submission")
+http_pg = Net::HTTP.new(uri.host, uri.port)
+raw_cookies = "PG_COOK_ETERNALID=60748f14710e919f69ab0d1339040b4e; PG_COOK_SESSIONID=30435d7f4f7a30848c757396958ca78c; PG_COOK_USERID=26689"
+
+filename = ARGV[0]
+
+include Term::ANSIColor
+
+File.open(filename) do |file|
+  language = 
+    if filename.end_with? "c"
+      "C"
+    elsif filename.end_with? "cpp"
+      "CPP"
+    elsif filename.end_with? "java"
+      "JAVA"
+    else
+      STDERR.puts "Unknown file type."
+      exit 1
+    end
+
+  probid = filename.split(".")[0]
+
+  req = Net::HTTP::Post::Multipart.new uri.request_uri, 
+    {"sourcefile"=>UploadIO.new(file, "application/octet-stream", filename),
+     "sourcecode"=>"", "language"=>language, "probid"=>probid}
+  req["Cookie"] = raw_cookies
+
+  finished = false
+  t = Thread.new {
+    while !finished
+      print "."
+      sleep 0.5
+    end
+  }
+  res = http_pg.request(req)
+
+  doc = Nokogiri::HTML(res.body)
+  verdict = doc.xpath("/html/body/table[3]/tr/td[3]/p/font/table").text().gsub(/\n/, '').strip
+  finished = true
+
+  t.join
+
+  if verdict == "Solved"
+    puts verdict.green
+  else
+    puts verdict.red
+  end
+end

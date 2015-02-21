@@ -1,0 +1,65 @@
+#!/usr/bin/env ruby
+
+require 'term/ansicolor'
+require 'nokogiri'
+require 'net/http'
+
+uri = URI.parse("http://www.programming-challenges.com/login.php")
+http_pg = Net::HTTP.new(uri.host, uri.port)
+#print "id: "
+#id = gets.chomp
+#print "password: "
+#`stty -echo`
+#pwd = gets.chomp
+#`stty echo`
+#puts
+
+#post_param = {login_user: id, login_pass: pwd}.map {|k, v| "#{k}=#{v}"}.join("&")
+##puts post_param
+#resp = http_pg.post(uri.path, post_param, {})
+##puts resp.status
+#raw_cookies = resp.header["Set-Cookie"]
+#raw_cookies = raw_cookies.split(", ").join("; ")
+
+raw_cookies = "PG_COOK_ETERNALID=60748f14710e919f69ab0d1339040b4e; PG_COOK_SESSIONID=30435d7f4f7a30848c757396958ca78c; PG_COOK_USERID=26689"
+
+#puts raw_cookies
+
+# list problems
+uri = URI.parse("http://www.programming-challenges.com/pg.php?page=studenthome&perpage=112&pagenum=0&orderby=10")
+resp = http_pg.get(uri.request_uri, {"Cookie" => raw_cookies})
+doc = Nokogiri::HTML(resp.body)
+
+cnt_solved = 0
+cnt_wrong = 0
+cnt_never = 0
+cnt_etc = 0
+
+include Term::ANSIColor
+
+doc.xpath("/html/body/table[3]/tr/td[3]/table/tr/td/table//tr")[1..-1].each do |tr|
+  tds = tr/"td"
+  prob_id = tds[0].text
+  prob_title = tds[1].text.strip
+  prob_status = tds[3].text
+
+  s = "#{prob_id} | #{"%-40s" % prob_title} | #{prob_status}"
+  if prob_status == "Never submitted"
+    puts s
+    cnt_never += 1
+  elsif prob_status == "Solved"
+    puts s.green
+    cnt_solved += 1
+  elsif prob_status == "Waiting for verdict"
+    puts s.yellow
+    cnt_etc += 1
+  else
+    puts s.red
+    cnt_wrong += 1
+  end
+end
+
+print "Solved: ", cnt_solved.to_s.green, "\n"
+print "Wrong answer: ", cnt_wrong.to_s.red, "\n"
+print "Never Submitted: ", cnt_never, "\n"
+print "etc.: ", cnt_etc.to_s.yellow, "\n"
