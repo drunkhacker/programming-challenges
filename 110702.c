@@ -5,11 +5,10 @@
 
 int is_prime[MAX_N];
 
-int mod_exp(unsigned int a, unsigned int n)
+int mod_exp(unsigned int a, unsigned int n, int m)
 {
     int s = 1;
-    int m = n;
-    //calc a^n mod n
+    //calc a^n mod m
     while (n > 0) {
         if (n % 2) {
             s = s*a % m;
@@ -31,7 +30,7 @@ int carmichael(int n)
         return 0;
 
     for (i = 2; i < n; i++) {
-        if (mod_exp(i, n) != i) {
+        if (mod_exp(i, n, n) != i) {
             /* debug */
             /* printf("%d^%d (mod %d) = %d\n", i, n, n, mod_exp(i, n)); */
             return 0;
@@ -67,8 +66,6 @@ int main()
     /* printf("1924^3800 (mod 3800) = %d\n", mod_exp(1924, 3800)); */
 
     pre_calc_prime();
-
-    /* printf("9 prime? %d\n", is_prime[9]); */
 
     while (1) {
         scanf("%d", &n);
