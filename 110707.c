@@ -1,15 +1,22 @@
 #include <stdio.h>
 
 /* 알고리즘 스케치
- * c1m1 + c2m2 = k 
- * n1m1 + n2m2 = n 의 격자점 해를 찾는 문제.
+ * n1x + n2y = n (n직선) 의 x>=0, y>=0 격자점 중에서
+ * c1x + c2y = k (c직선) 를 최소화하는 경우를 찾는 문제
  *
- * 따라서, k의 탐색범위를 구한 뒤,
- * 그 범위안의 c1*km1 + c2*km2 = gcd(c1,c2)을 만족하는 k를 탐색하면서
- * 1) m1, m2가 0이상이며
- * 2) n1m1 + n2m2 = n 위에 있는지 확인
+ * 기울기의 관계에 따라 경우가 나뉘는데,
+ * 1) c직선이 n직선보다 가파른 경우
+ *    n직선의 x절편 근처의 첫번째 격자점이 답
+ * 2) c직선이 n직선보다 완만한 경우
+ *    n직선의 y절편 근처의 첫번째 격자점이 답
  *
- * see http://math.stackexchange.com/questions/32127/does-ax-by-c-pass-through-any-lattice-point
+ * euclid alg.을 써서 n1x + n2y = g = gcd(n1, n2)를 만족하는 x,y를 구한 다음에
+ * n/g를 양변에 곱해서 n직선 위의 점 (X, Y)를 구한다.
+ * 이때 다른 격자점들은 dx = n2, dy = n1를 각각 X, Y에 더하거나 빼거나 하면 나옴.
+ *
+ * 위에서 나눈 경우에 따라 절편 근처의 격자점들을 찾으면 됨.
+ * X 및 Y의 대소관계에 따라 dx, dy의 부호를 결정해서 X>=0, Y>=0 이 되기위해 dx,dy를 얼마나
+ * 더하거나 빼야 하는지 알아내면 됨.
  */
 
 /* p*x + q*y = gcd(p, q) */
@@ -34,6 +41,10 @@ long gcd(long p, long q, long *x, long *y)
     return g;
 }
 
+#define CEIL_DIV(x, n) (((x)+(n)-1)/(n))
+#define MAX(a,b) ((a)>(b)?(a):(b))
+#define MIN(a,b) ((a)<(b)?(a):(b))
+
 void process(int n, int c1, int n1, int c2, int n2, int *m1, int *m2)
 {
     long k;
@@ -43,7 +54,7 @@ void process(int n, int c1, int n1, int c2, int n2, int *m1, int *m2)
     int i;
 
     g = gcd(n1, n2, &x, &y);
-    printf("%d*%ld + %d*%ld = %ld\n", n1, x, n2, y, g);
+    /*printf("%d*%ld + %d*%ld = %ld\n", n1, x, n2, y, g);*/
 
     if (n % g != 0) {
         *m1 = -1;
@@ -53,36 +64,44 @@ void process(int n, int c1, int n1, int c2, int n2, int *m1, int *m2)
 
     x *= n/g;
     y *= n/g;
-    i = x - y > 0;
 
-    // x나 y중 둘 중 하나는 음수일것
-    dx = n2/g * ((x <= 0) ? 1 : -1);
-    dy = n1/g * ((x <= 0) ? -1 : 1);
+    dx = n2/g;
+    dy = n1/g;
 
-    printf("dx = %ld, dy = %ld\n", dx, dy);
-
-    printf("x = %ld, y = %ld\n", x, y);
-    while ((x < 0 || y < 0) && i == (x - y > 0)) {
-        x += dx;
-        y += dy;
-    }
-    printf("x = %ld, y = %ld\n", x, y);
-
-    *m1 = -1;
-    *m2 = -1;
-    k = ((long)1<<63) - 1;
-    while (x >= 0 && y >= 0) {
-        if (k > c1*x + c2*y) {
-            k = c1*x + c2*y;
-            *m1 = x;
-            *m2 = y;
-
-            /*printf("x=%ld, y=%ld, k=%ld\n", x, y, k);*/
+    if ((long double)c1/c2 > (long double)n1/n2) {
+        if (y > x) {
+            /*printf("case1\n");*/
+            // x < 0, y > 0
+            k = CEIL_DIV(-x, dx);
+            dy *= -1;
+        } else {
+            /*printf("case2\n");*/
+            // x > 0, y < 0
+            k = x/dx;
+            dx *= -1;
         }
-
-        x += dx;
-        y += dy;
+    } else {
+        if (y > x) {
+            /*printf("case3\n");*/
+            // x < 0, y > 0
+            k = y/dy;
+            dy *= -1;
+        } else {
+            /*printf("case4\n");*/
+            // x > 0, y < 0
+            k = CEIL_DIV(-y, dy);
+            dx *= -1;
+        }
     }
+
+    x += k*dx;
+    y += k*dy;
+
+    /*printf("dx = %ld, dy = %ld, k = %ld\n", dx, dy, k);*/
+    /*printf("x = %ld, y = %ld\n", x, y);*/
+
+    *m1 = x;
+    *m2 = y;
 }
 
 int main()
