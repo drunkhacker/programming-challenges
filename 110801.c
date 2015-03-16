@@ -2,14 +2,15 @@
 #include <string.h>
 
 #define MAX_N 8
+#define MAX_NN 64
 #define abs(a) ((a)<0?(-(a)):(a))
 
 int board_size;
 int bishop_count;
 long answer_count;
 
-long white_count[MAX_N+1][65];
-long black_count[MAX_N+1][65];
+long white_count[MAX_N+1][MAX_NN+1];
+long black_count[MAX_N+1][MAX_NN+1];
 
 typedef struct cell_s cell_t;
 struct cell_s {
@@ -56,7 +57,7 @@ void backtrack(cell_t a[], int k, int n, int board)
 {
     int i;
     int c_cnt;
-    cell_t c[64];
+    cell_t c[MAX_NN];
 
     if (n == 0) {
         answer_count = 1;
@@ -84,8 +85,8 @@ void process()
     long c = 0;
     long c1 = 0;
 
-    cell_t a1[64];
-    cell_t a2[64];
+    cell_t a1[MAX_NN];
+    cell_t a2[MAX_NN];
     for (i = 0; i <= bishop_count; i++) {
         if (white_count[board_size][i] < 0) {
             answer_count = 0;
@@ -112,8 +113,8 @@ int main()
 {
     int i, n;
 
-    for (n = 1; n <= 8; n++) {
-        for (i = 0; i <= 64; i++) {
+    for (n = 1; n <= MAX_N; n++) {
+        for (i = 0; i <= MAX_NN; i++) {
             white_count[n][i] = -1;
             black_count[n][i] = -1;
         }
