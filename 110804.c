@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define MAX_N 35
 #define MAX_DEGREE 35
@@ -13,15 +14,21 @@ int N, M;
 #define dprint(...)
 #endif
 
-typedef struct graph_s graph_t;
-struct graph_s {
-    int edges[MAX_N+1][MAX_DEGREE];
-    int degree[MAX_N+1];
-    int nvertices;
-    int nedges;
-};
+/*typedef struct graph_s graph_t;*/
+/*struct graph_s {*/
+    /*int edges[MAX_N+1][MAX_DEGREE];*/
+    /*int degree[MAX_N+1];*/
+    /*int nvertices;*/
+    /*int nedges;*/
+/*};*/
 
-graph_t graph;
+int graph[MAX_N+1][MAX_N+1];
+int degrees[MAX_N+1];
+
+int compare_node(const void *p1, const void *p2)
+{
+    return degrees[*(int *)p2] - degrees[*(int *)p1];
+}
 
 int find_candidates(int a[], int k, int c[])
 {
@@ -38,13 +45,15 @@ int find_candidates(int a[], int k, int c[])
         }
         dprint("\n");
 
+        qsort(c, r, sizeof(int), compare_node);
+
         return r;
     }
 
     // a[k]에 들어갈 후보군 결정 
     // return값은 candidates의 갯수
 
-    for (i = 1; i <= N; i++) {
+    for (i = a[k-1] + 1; i <= N; i++) {
         valid = 1;
 
         // v[i]에 인접한 노드에 이미 service center가 있다면 패스
@@ -62,13 +71,14 @@ int find_candidates(int a[], int k, int c[])
     }
 
     dprint("\n");
+    qsort(c, r, sizeof(int), compare_node);
 
     return r;
 }
 
 int backtrack(int a[], int k, int n)
 {
-    int c[MAX_N];
+    int c[MAX_N+1];
     int n_c;
     int i, j;
     int valid;
@@ -110,12 +120,15 @@ int process()
     int degree;
     int i, j;
     int d_num;
-    int a[MAX_N];
+    int a[MAX_N+1];
 
     // get minimum bound of domination number
     // see : http://en.wikipedia.org/wiki/Dominating_set
     for (i = 1; i <= N; i++) {
-        max_d = MAX(max_d, graph.degree[i]);
+        d_num = 0;
+        for (j = 1; j <= N; j++)
+            d_num += graph[i][j];
+        max_d = MAX(max_d, d_num);
     }
 
     d_num = N/(1+max_d);
@@ -138,14 +151,15 @@ int main()
         if (N == 0 && M == 0)
             break;
 
-        memset(&graph, 0, sizeof(graph));
+        memset(graph, 0, sizeof(graph));
+        memset(degrees, 0, sizeof(degrees));
 
-        graph.nvertices = M;
         for (i = 0; i < M; i++) {
             scanf("%d%d", &v1, &v2);
-            graph.edges[v1][graph.degree[v1]++] = v2;
-            graph.edges[v2][graph.degree[v2]++] = v1;
-            graph.nedges++;
+            graph[v1][v2] = 1;
+            graph[v2][v1] = 1;
+            degrees[v1]++;
+            degrees[v2]++;
         }
 
         printf("%d\n", process());
