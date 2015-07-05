@@ -1,12 +1,8 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define MAX_N 35
-#define MAX_DEGREE 35
-#define MAX(a,b) ((a)>(b)?(a):(b))
-
-int N, M;
 
 #ifdef DEBUG
 #define dprint(...) printf(__VA_ARGS__)
@@ -14,103 +10,168 @@ int N, M;
 #define dprint(...)
 #endif
 
-/*typedef struct graph_s graph_t;*/
-/*struct graph_s {*/
-    /*int edges[MAX_N+1][MAX_DEGREE];*/
-    /*int degree[MAX_N+1];*/
-    /*int nvertices;*/
-    /*int nedges;*/
-/*};*/
+#define CEIL_DIV(x, y) (((x)+(y)-1)/(y))
 
-int graph[MAX_N+1][MAX_N+1];
-int degrees[MAX_N+1];
+int G[MAX_N+1][MAX_N+1];
+int d[MAX_N+1];
+int ns[MAX_N+1][MAX_N+1] = {0,};
+int n_cnt[MAX_N+1] = {0,};
+int md[MAX_N+1] = {0,};
+int N, M;
+int g_cnt = 0;
 
-int subgraph[MAX_N+1][MAX_N+1];
-int sub_node_cnt[MAX_N+1];
-int subgraph_cnt;
+int input()
+{
+    int i;
+    int v1, v2;
+
+    scanf("%d %d", &N, &M);
+    if (N == 0 && M == 0)
+        return 0;
+
+    memset(G, 0, sizeof G);
+    memset(d, 0, sizeof d);
+
+    for (i = 0; i < M; i++) {
+        scanf("%d %d", &v1, &v2);
+        G[v1][v2] = 1;
+        G[v2][v1] = 1;
+        d[v1]++;
+        d[v2]++;
+    }
+
+    return 1;
+}
+
+void dfs(int n, int visited[])
+{
+    int v, i;
+    for (v = 1; v <= N; v++) {
+        if (G[v][n] && !visited[v]) {
+            visited[v] = 1;
+            ns[g_cnt][n_cnt[g_cnt]++] = v;
+            dfs(v, visited);
+        }
+    }
+}
 
 int compare_degree(const void *p1, const void *p2)
 {
-    return degrees[*(int *)p2] - degrees[*(int *)p1];
+    return d[*(int *)p2] - d[*(int *)p1];
 }
 
-int compare_node(const void *p1, const void *p2)
+void find_components()
 {
-    return *(int *)p1 - *(int *)p2;
+    int visited[MAX_N+1];
+    int v, i, j, g;
+
+    memset(n_cnt, 0, sizeof(n_cnt));
+    memset(ns, 0, sizeof(ns));
+    memset(visited, 0, sizeof(visited));
+    memset(md, 0, sizeof(md));
+    g_cnt = 0;
+
+    for (v = 1; v <= N; v++) {
+        if (!visited[v]) {
+            /* get connected component */
+            visited[v] = 1;
+            ns[g_cnt][n_cnt[g_cnt]++] = v;
+            dfs(v, visited);
+
+            /* get maximum degree of current component */
+            for (i = 0; i < n_cnt[g_cnt]; i++) {
+                if (d[ns[g_cnt][i]] > md[g_cnt])
+                    md[g_cnt] = d[ns[g_cnt][i]];
+            }
+
+            qsort(ns[g_cnt], n_cnt[g_cnt], sizeof(int), compare_degree);
+
+            g_cnt++;
+        }
+    }
+
+    /* debug print .. */
+    dprint("find %d components\n", g_cnt);
+    for (g = 0; g < g_cnt; g++) {
+        dprint("   ");
+        for (i = 0; i < n_cnt[g]; i++)
+            dprint("%02d ", ns[g][i]);
+        dprint("\n");
+
+        for (i = 0; i < n_cnt[g]; i++) {
+            dprint("%02d ", ns[g][i]);
+            for (j = 0; j < n_cnt[g]; j++) {
+                dprint("%c  ", G[ns[g][i]][ns[g][j]] ? '*': ' ');
+            }
+            dprint("\n");
+        }
+    }
 }
 
 int find_candidates(int a[], int k, int c[], int g)
 {
-    int i, j;
-    int r = 0;
-    int valid;
+    int v, i, j, cnt;
 
     if (k == 0) {
-        for (i = 0; i < sub_node_cnt[g]; i++) {
-            c[r++] = subgraph[g][i];
-        }
-
-        /* qsort(c, r, sizeof(int), compare_degree); */
-
-        return r;
+        memcpy(c, ns[g], n_cnt[g]*sizeof(int));
+        return n_cnt[g];
     }
 
-    // a[k]에 들어갈 후보군 결정 
-    // return값은 candidates의 갯수
-
-    for (i = 0; i < sub_node_cnt[g]; i++) {
-        if (a[k-1] >= subgraph[g][i])
-            continue;
-
-        valid = 1;
-
-        // v[i]에 인접한 노드에 이미 service center가 있다면 패스
-        for (j = 0; j <= k-1; j++) {
-            if (graph[a[j]][subgraph[g][i]]) {
-                valid = 0;
-                break;
-            }
-        }
-
-        if (valid) {
-            c[r++] = subgraph[g][i];
+    for (j = 0; j < n_cnt[g]; j++) {
+        if (a[k-1] == ns[g][j]) {
+            break;
         }
     }
 
-    /* qsort(c, r, sizeof(int), compare_degree); */
+    for (i = j + 1, cnt = 0; i < n_cnt[g]; i++) {
+        v = ns[g][i];
+        /*for (j = 0; j < k; j++) {*/
+            /*if (G[a[j]][v] || v == a[j])*/
+                /*break;*/
+        /*}*/
 
-    return r;
+        /*if (j == k)*/
+            c[cnt++] = v;
+    }
+
+    return cnt;
 }
 
 int backtrack(int a[], int k, int n, int g)
 {
+    int n_c, i, j;
     int c[MAX_N+1];
-    int n_c;
-    int i, j;
-    int valid;
+    int visited[MAX_N+1];
 
-    if (k == n) {
-        // 모든 노드에서 service 센터에 접근 가능한지 확인
-        for (i = 0; i < sub_node_cnt[g]; i++) {
-            valid = 0;
-            for (j = 0; j < n; j++) {
-                if (graph[a[j]][subgraph[g][i]]) {
-                    valid = 1;
-                    break;
+    if (n == k) {
+        memset(visited, 0, sizeof(visited));
+        for (i = 0; i < n; i++) {
+            for (j = 0; j < n_cnt[g]; j++) {
+                if (G[a[i]][ns[g][j]] || a[i] == ns[g][j]) {
+                    visited[ns[g][j]] = 1;
                 }
             }
-
-            if (!valid)
-                return 0;
         }
 
+        dprint("a = ");
+        for (i = 0; i < n; i++)
+            dprint("%d ", a[i]);
+
+        for (i = 0; i < n_cnt[g]; i++)
+            if (visited[ns[g][i]] == 0) {
+                dprint("==> not cover %d\n", ns[g][i]);
+                return 0;
+            }
+        dprint("\n");
         return 1;
     }
 
     n_c = find_candidates(a, k, c, g);
 
-    if (n_c < n - k)
+    /*dprint("n_c=%d, n=%d, k=%d\n", n_c, n, k);*/
+    if (n_c < n - k) {
         return 0;
+    }
 
     for (i = 0; i < n_c; i++) {
         a[k] = c[i];
@@ -121,247 +182,62 @@ int backtrack(int a[], int k, int n, int g)
     return 0;
 }
 
-int neighbors(int a, int n[])
+int mds(int i) /* i = component index */
 {
-    int r = 0;
-    int i = 0;
+    int dn;
+    int a[MAX_N+1];
 
-    /* dprint("N(%d): ",a); */
+    /* |MDS| has lower and upper bound
+     * see: http://en.wikipedia.org/wiki/Dominating_set
+     */
+    dprint("%d <= dn <= %d\n", CEIL_DIV(n_cnt[i], 1 + md[i]), n_cnt[i]/2);
+    if (CEIL_DIV(n_cnt[i], 1 + md[i]) == n_cnt[i]/2)
+        return CEIL_DIV(n_cnt[i], 1 + md[i]);
 
-    /* n[r++] = a; */
-    /* dprint("%d ", a); */
-    for (i = 1; i <= N; i++) {
-        if (graph[a][i]) {
-            n[r++] = i;
-            /* dprint("%d ", i); */
-        }
+    for (dn = CEIL_DIV(n_cnt[i], 1 + md[i]); dn <= n_cnt[i]/2; dn++) {
+        /* try to construct dominating set with `dn` vertices */
+        dprint("try mds = %d\n", dn);
+        if (backtrack(a, 0, dn, i))
+            return dn;
     }
-    /* dprint("\n"); */
 
-    return r;
+    return dn;
 }
-
-int contains(int a[], int na, int b[], int nb)
-{
-    //check if a contains b
-    int i = 0, j = 0;
-
-    if (nb == 0 || na == 0)
-        return 0;
-
-    if (nb > na) 
-        return 0;
-
-    while (i < na && j < nb) {
-        if (b[j] > a[i]) {
-            i++;
-        } else if (b[j] < a[i]) {
-            return 0;
-        } else {
-            i++;
-            j++;
-        }
-    }
-
-    return 1;
-}
-
-void swap_node(int n1, int n2)
-{
-    int i,j,t;
-
-    for (i = 1; i <= N; i++) {
-        if (graph[i][n1] && graph[i][n2])
-            continue;
-
-        if (graph[i][n1]) {
-            graph[i][n2] = 1;
-            graph[i][n1] = 0;
-        } else if (graph[i][n2]) {
-            graph[i][n1] = 1;
-            graph[i][n2] = 0;
-        }
-    }
-
-    //swap line
-    for (i = 1; i <= N; i++) {
-        t = graph[n1][i];
-        graph[n1][i] = graph[n2][i];
-        graph[n2][t]= t;
-    }
-}
-
-void prune_graph()
-{
-    int n1[MAX_N];
-    int n_n1;
-    int n2[MAX_N];
-    int n_n2;
-    int i,j;
-
-    // adjust graph by removing non-dominating nodes
-    for (i = N; i >= 2; i--) {
-        n_n1 = neighbors(i, n1);
-        for (j = i-1; j >= 1; j--) {
-            n_n2 = neighbors(j, n2);
-            //i의 주변노드가 j의 주변노드를 모두 포함하면 j를 없애도 된다.
-
-            if (contains(n1, n_n1, n2, n_n2)) {
-                dprint("N(%d) > N(%d)\n", i, j);
-                swap_node(j, N);
-                N--;
-            }
-        }
-    }
-
-}
-
-void print_graph()
-{
-    int i, j;
-
-    dprint("  ");
-    for (i = 1; i <= N; i++) {
-        dprint("%2d ", i);
-    }
-    dprint("\n");
-
-    for (i = 1; i <= N; i++) {
-        dprint("%2d ", i);
-        for (j = 1; j <= N; j++) {
-            if (graph[i][j]) {
-                dprint("*  ");
-            } else {
-                dprint("   ");
-            }
-        }
-        dprint("\n");
-    }
-}
-
-void dfs(int n, int visited[])
-{
-    int i;
-
-    for (i = 1; i <= N; i++) {
-        if (graph[n][i] && !visited[i]) {
-            visited[i] = 1;
-            subgraph[subgraph_cnt][sub_node_cnt[subgraph_cnt]++] = i;
-            dfs(i, visited);
-        }
-    }
-}
-
-void find_components()
-{
-    int i, j;
-    int visited[MAX_N+1];
-    memset(visited, 0, sizeof(visited));
-    memset(sub_node_cnt, 0, sizeof(sub_node_cnt));
-    memset(subgraph, 0, sizeof(subgraph));
-
-    subgraph_cnt = 0;
-
-    for (i = 1; i <= N; i++) {
-        if (!visited[i]) {
-            visited[i] = 1;
-            subgraph[subgraph_cnt][sub_node_cnt[subgraph_cnt]++] = i;
-            dfs(i, visited);
-
-            //sort by node number
-            qsort(subgraph[subgraph_cnt], sub_node_cnt[subgraph_cnt], 
-                  sizeof(int), compare_node);
-
-            subgraph_cnt++;
-        }
-    }
-
-    dprint("find %d components\n", subgraph_cnt);
-    for (i = 0; i < subgraph_cnt; i++) {
-        dprint("graph %d: ", i);
-        for (j = 0; j < sub_node_cnt[i]; j++)
-            dprint("%d ", subgraph[i][j]);
-        dprint("\n");
-    }
-}
-
 
 int process()
 {
-    int max_d;
-    int degree;
-    int i, j, g;
-    int d_num;
-    int a[MAX_N+1];
-    int new_n;
-    int *pi, *pj;
-    int c = 0;
+    int sum = 0;
+    int i, j;
 
-    /* print_graph(); */
-    /* prune_graph(); */
-    find_components();
-    print_graph();
+    /* debug print */
+    dprint("   ");
+    for (i = 1; i <= N; i++)
+        dprint("%02d ", i);
+    dprint("\n");
 
-    for (g = 0; g < subgraph_cnt; g++) {
-        // get minimum bound of domination number
-        // see : http://en.wikipedia.org/wiki/Dominating_set
-        max_d = 0;
-        for (i = 0; i < sub_node_cnt[g]; i++) {
-            d_num = 0;
-            for (j = 0; j < sub_node_cnt[g]; j++)
-                d_num += graph[subgraph[g][i]][subgraph[g][j]];
-            max_d = MAX(max_d, d_num);
+    for (i = 1; i <= N; i++) {
+        dprint("%02d ", i);
+        for (j = 1; j <= N; j++) {
+            dprint("%c  ", G[i][j] ? '*': ' ');
         }
-
-        d_num = (sub_node_cnt[g]+max_d)/(1+max_d);
-
-        for (i = d_num; i <= sub_node_cnt[g]; i++) {
-            dprint("i=%d\n", i);
-            if (backtrack(a, 0, i, g))
-                break;
-        }
-
-        c += i;
+        dprint("\n");
     }
 
-    return c;
+    find_components();
+
+    for (i = 0; i < g_cnt; i++) {
+        dprint("== component %d ==\n", i);
+        sum += mds(i);
+    }
+
+    return sum;
 }
 
 int main()
 {
-    int i, v1, v2;
-
-    while (1) {
-        scanf("%d%d", &N, &M);
-
-        if (N == 0 && M == 0)
-            break;
-
-        memset(graph, 0, sizeof(graph));
-        memset(degrees, 0, sizeof(degrees));
-
-        for (i = 0; i <= N; i++) {
-            graph[i][i] = 1;
-        }
-
-
-        for (i = 0; i < M; i++) {
-            scanf("%d%d", &v1, &v2);
-            graph[v1][v2] = 1;
-            graph[v2][v1] = 1;
-            degrees[v1]++;
-            degrees[v2]++;
-        }
-
-        /* print_graph(); */
-        /* prune_graph(); */
-        /* dprint("\n\n"); */
-        /* print_graph(); */
-
+    while (input())
         printf("%d\n", process());
-    }
 
     return 0;
 }
-
 
